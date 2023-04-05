@@ -7,48 +7,94 @@ WhatsAsena - Yusuf Usta
 */
 
 const chalk = require('chalk');
-const {WAConnection, MessageOptions, MessageType} = require('@adiwajshing/baileys');
-const {StringSession} = require('./whatsasena/');
+const { DisconnectReason, useMultiFileAuthState, downloadContentFromMessage, makeInMemoryStore, BufferJSON, default: makeWASocket } = require('@adiwajshing/baileys');
 const fs = require('fs');
+const {multiauthState} = require("./lib/multiauth");
 
-async function whatsAsena () {
-    const conn = new WAConnection();
-    const Session = new StringSession();  
-    conn.version = [2, 2119, 6]
-    conn.logger.level = 'warn';
-    conn.regenerateQRIntervalMs = 50000;
-    
-    conn.on('connecting', async () => {
-        console.log(`${chalk.green.bold('Whats')}${chalk.blue.bold('Asena')}
-${chalk.white.italic('AsenaString Kodu Alıcı')}
+async function Singmulti() {
+  if (!fs.existsSync(__dirname + "/session.json"))
+    await MakeSession("config.SESSION", __dirname + "/session.json");
+  const { state } = await useMultiFileAuthState(__dirname + "/session");
+  await multiauthState("session.json", __dirname + "/session", state);
+}
+Singmulti()
 
-${chalk.blue.italic('ℹ️  Connecting to Whatsapp... Please Wait.')}`);
-    });
-    
 
-    conn.on('open', async () => {
-        var st = Session.createStringSession(conn.base64EncodedAuthInfo());
-        console.log(
-            chalk.green.bold('Asena String Kodunuz: '), Session.createStringSession(conn.base64EncodedAuthInfo())
-        );
-        
-        if (!fs.existsSync('config.env')) {
-            fs.writeFileSync('config.env', `ASENA_SESSION="${st}"`);
-        }
-        if (conn.user.jid.startsWith('90')) {
-            await conn.sendMessage(conn.user.jid,st, MessageType.text)
-            await conn.sendMessage(conn.user.jid,'*Bu Kodu Kimseyle Paylaşmayın!*', MessageType.text)
-            console.log(
-                chalk.blue.bold('Locale kuruyorsanız node bot.js ile botu başlatabilirsiniz.')
-            );
-        }
-        else {
-            await conn.sendMessage(conn.user.jid,st, MessageType.text)
-            await conn.sendMessage(conn.user.jid,'*Do Not Share This Code With Anyone!*', MessageType.text)
-            console.log(
-                chalk.blue.bold('If you are installing locale, you can start the bot with node bot.js')
-            );
-        }
+
+setTimeout(() => {
+  
+  async function connectToWhatsApp() {
+  const { state } = await useMultiFileAuthState(__dirname + "/session");
+
+  const conn = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
+    logger: P({ level: "silent" }),
+    patchMessageBeforeSending: (message) => {
+
+    const requiresPatch = !!(
+        message.buttonsMessage || message.templateMessage || message.listMessage
+    );
+    if (requiresPatch) {
+        message = {
+            viewOnceMessage: {
+                message: {
+                    messageContextInfo: {
+                        deviceListMetadataVersion: 2,
+                        deviceListMetadata: {},
+                    },
+                    ...message,
+                },
+            },
+        };
+    }
+    return message;
+},
+    syncFullHistory: false
+  })
+
+  conn.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update
+
+
+    if (connection === "connecting") {
+      console.log("ℹ️ Connecting to WhatsApp... Please Wait.");
+    }
+if (connection == "open") {
+  console.log("Connected to WhatsApp Web✅")
+  console.log("WHATS-KRIZ-AI Is Now Online..✅")
+  }
+
+    if (connection === 'close') {
+      let reason = new Boom(lastDisconnect.error).output.statusCode;
+      if (reason === DisconnectReason.badSession) {
+        console.log(`Uhh Session Error Please Rescan And Try Again...⚠️`)
+        conn.logout()
+      } else if (reason === DisconnectReason.connectionClosed) {
+        console.log("Reconnecting...🔁")
+        connectToWhatsApp()
+      } else if (reason === DisconnectReason.connectionLost) {
+        console.log("Connection Is Lost  Retrying...🔁")
+        connectToWhatsApp()
+      } else if (reason === DisconnectReason.connectionReplaced) {
+        console.log("Connection Is Replaced...❗")
+        conn.logout()
+      } else if (reason === DisconnectReason.loggedOut) {
+        console.log(`Connection Is Lost Device Logged Out...🔚`)
+        conn.logout()
+      } else if (reason === DisconnectReason.restartRequired) {
+        console.log("Restart Required...❗")
+        console.log("Restarting...🔁")
+        connectToWhatsApp()
+      } else if (reason === DisconnectReason.timedOut) {
+        console.log("Connection Timeout Retrying...🔁")
+        connectToWhatsApp()
+      } else {
+        conn.end(`Connection stopped🛑 : ${reason}|${lastDisconnect.error}`)
+      }
+    }
+  })
+
         
         process.exit(0);
     });
