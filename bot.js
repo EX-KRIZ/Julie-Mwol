@@ -13,7 +13,7 @@ const chalk = require('chalk');
 const config = require('./config');
 const simpleGit = require('simple-git');
 
-const { MessageOptions, MessageType, Mimetype, Presence,useMultiFileAuthState, default: makeWASocket } = require('@adiwajshing/baileys');
+const { MessageOptions, MessageType, Mimetype, Presence, useMultiFileAuthState, BufferJSON, default: makeWASocket } = require('@adiwajshing/baileys');
 const { Boom } = require("@hapi/boom");
 const {Message, StringSession, Image, Video} = require('./julie/');
 const { DataTypes } = require('sequelize');
