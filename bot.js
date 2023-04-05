@@ -12,12 +12,16 @@ const events = require("./events");
 const chalk = require('chalk');
 const config = require('./config');
 const simpleGit = require('simple-git');
-const {WAConnection, MessageOptions, MessageType, Mimetype, Presence} = require('@adiwajshing/baileys');
+
+const { MessageOptions, MessageType, Mimetype, Presence,useMultiFileAuthState, default: makeWASocket } = require('@adiwajshing/baileys');
+const { Boom } = require("@hapi/boom");
 const {Message, StringSession, Image, Video} = require('./julie/');
 const { DataTypes } = require('sequelize');
 const { getMessage } = require("./plugins/sql/greetings");
 const git = simpleGit();
+const { MakeSession } = require("./lib/session")
 const axios = require('axios');
+const {multiauthState} = require("./lib/multiauth");
 const got = require('got');
 
 const Language = require('./language');
@@ -65,40 +69,51 @@ Array.prototype.remove = function() {
     return this;
 };
 
-async function whatsAsena () {
-    await config.DATABASE.sync();
-    var StrSes_Db = await WhatsAsenaDB.findAll({
-        where: {
-          info: 'StringSession'
-        }
-    });
+
     
     
-    const conn = new WAConnection();
-    const Session = new StringSession();
+    async function Singmulti() {
+  if (!fs.existsSync(__dirname + "/session.json"))
+    await MakeSession("config.SESSION", __dirname + "/session.json");
+  const { state } = await useMultiFileAuthState(__dirname + "/session");
+  await multiauthState("session.json", __dirname + "/session", state);
+}
+Singmulti()
 
-    conn.logger.level = config.DEBUG ? 'debug' : 'warn';
-    var nodb;
 
-    if (StrSes_Db.length < 1) {
-        nodb = true;
-        conn.loadAuthInfo(Session.deCrypt(config.SESSION)); 
-    } else {
-        conn.loadAuthInfo(Session.deCrypt(StrSes_Db[0].dataValues.value));
+
+setTimeout(() => {
+  
+  async function connectToWhatsApp() {
+  const { state } = await useMultiFileAuthState(__dirname + "/session");
+
+  const conn = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
+    logger: P({ level: "silent" }),
+    patchMessageBeforeSending: (message) => {
+
+    const requiresPatch = !!(
+        message.buttonsMessage || message.templateMessage || message.listMessage
+    );
+    if (requiresPatch) {
+        message = {
+            viewOnceMessage: {
+                message: {
+                    messageContextInfo: {
+                        deviceListMetadataVersion: 2,
+                        deviceListMetadata: {},
+                    },
+                    ...message,
+                },
+            },
+        };
     }
+    return message;
+},
+    syncFullHistory: false
+  })
 
-    conn.on ('credentials-updated', async () => {
-        console.log(
-            chalk.blueBright.italic('✅ Login information updated!')
-        );
-
-        const authInfo = conn.base64EncodedAuthInfo();
-        if (StrSes_Db.length < 1) {
-            await WhatsAsenaDB.create({ info: "StringSession", value: Session.createStringSession(authInfo) });
-        } else {
-            await StrSes_Db[0].update({ value: Session.createStringSession(authInfo) });
-        }
-    })    
 
     conn.on('connecting', async () => {
         console.log(`${chalk.green.bold('Whats')}${chalk.blue.bold('Asena')}
